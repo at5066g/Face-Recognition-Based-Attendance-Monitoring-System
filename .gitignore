@@ -1,0 +1,13 @@
+# Generated Data
+TrainingImage/
+TrainingImageLabel/
+Attendance/
+StudentDetails/
+
+# Python
+__pycache__/
+*.pyc
+
+# Temporary Files
+dlib_install.whl
+*.log

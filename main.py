@@ -171,6 +171,7 @@ def TakeImages():
         harcascadePath = "haarcascade_frontalface_default.xml"
         detector = cv2.CascadeClassifier(harcascadePath)
         sampleNum = 0
+        cv2.namedWindow('Taking Images')
         while (True):
             ret, img = cam.read()
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -186,6 +187,9 @@ def TakeImages():
                 cv2.imshow('Taking Images', img)
             # wait for 100 miliseconds
             if cv2.waitKey(100) & 0xFF == ord('q'):
+                break
+            # Check if window is closed
+            if cv2.getWindowProperty('Taking Images', cv2.WND_PROP_VISIBLE) < 1:
                 break
             # break if the sample number is morethan 100
             elif sampleNum > 100:
@@ -209,7 +213,7 @@ def TakeImages():
 def TrainImages():
     check_haarcascadefile()
     assure_path_exists("TrainingImageLabel/")
-    recognizer = cv2.face_LBPHFaceRecognizer.create()
+    recognizer = cv2.face.LBPHFaceRecognizer_create()
     harcascadePath = "haarcascade_frontalface_default.xml"
     detector = cv2.CascadeClassifier(harcascadePath)
     faces, ID = getImagesAndLabels("TrainingImage")
@@ -277,7 +281,10 @@ def TrackImages():
         cam.release()
         cv2.destroyAllWindows()
         window.destroy()
+    cv2.namedWindow('Taking Attendance')
     while True:
+        if cv2.getWindowProperty('Taking Attendance', cv2.WND_PROP_VISIBLE) < 1:
+            break
         ret, im = cam.read()
         gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         faces = faceCascade.detectMultiScale(gray, 1.2, 5)
