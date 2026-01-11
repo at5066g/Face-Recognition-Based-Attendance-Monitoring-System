@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
+import cloudinary.utils
 from dotenv import load_dotenv
 import cv2
 import numpy as np
@@ -11,6 +12,7 @@ import face_recognition
 import requests
 import io
 from datetime import datetime
+import threading
 
 # Load environment variables
 load_dotenv()
@@ -26,15 +28,59 @@ cloudinary.config(
 )
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
-ATTENDANCE_FILE = 'attendance.csv'
 
-# Global variables for face recognition
+# Global variables
 known_face_encodings = []
 known_face_names = []
+todays_attendance = [] # List of {'name': 'Name', 'time': 'HH:MM:SS'}
 
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def upload_to_cloud(content, public_id):
+    """Uploads content (string/bytes) to Cloudinary in a separate thread."""
+    try:
+        # resource_type='raw' is used for non-image files like CSV
+        # convert string to bytes if needed
+        if isinstance(content, str):
+            content = content.encode('utf-8')
+            
+        cloudinary.uploader.upload(content, resource_type="raw", public_id=public_id, overwrite=True, invalidate=True)
+        print(f"Synced to Cloudinary: {public_id}")
+    except Exception as e:
+        print(f"Cloud upload failed: {e}")
+
+def load_todays_data():
+    """Fetch today's attendance CSV from Cloudinary to populate memory."""
+    global todays_attendance
+    todays_attendance = []
+    
+    now = datetime.now()
+    date_str = now.strftime('%Y-%m-%d')
+    public_id = f"attendance_records/Attendance_{date_str}.csv"
+    
+    print("Checking for existing daily records in cloud...")
+    try:
+        # Generate the URL for the raw file
+        url, options = cloudinary.utils.cloudinary_url(public_id, resource_type="raw")
+        
+        # Try to fetch it
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            lines = response.text.strip().split('\n')
+            # Skip header
+            for line in lines[1:]:
+                parts = line.strip().split(',')
+                if len(parts) >= 2:
+                    todays_attendance.append({'name': parts[0], 'time': parts[1]})
+            print(f"Loaded {len(todays_attendance)} records from cloud for today.")
+        else:
+            print("No existing records for today found (New Day).")
+            
+    except Exception as e:
+        print(f"Error loading today's data: {e}")
 
 def load_known_faces():
     """Load images from Cloudinary and encode faces."""
@@ -76,64 +122,83 @@ def load_known_faces():
     except Exception as e:
         print(f"Failed to connect to Cloudinary: {e}")
 
-import threading
+import smtplib
+from email.message import EmailMessage
 
-def upload_to_cloud(file_path, public_id):
-    """Uploads a file to Cloudinary in a separate thread."""
+# ... (rest of imports)
+
+def send_email(name, time_str):
+    """Sends an email notification on first daily check-in."""
+    sender_email = os.getenv('MAIL_USERNAME')
+    sender_password = os.getenv('MAIL_PASSWORD')
+    recipient_email = os.getenv('MAIL_RECIPIENT')
+
+    if not sender_email or not sender_password or not recipient_email:
+        print("Email credentials missing in .env. Skipping notification.")
+        return
+
+    msg = EmailMessage()
+    msg['Subject'] = f"Attendance Alert: {name} Checked In"
+    msg['From'] = sender_email
+    msg['To'] = recipient_email
+    
+    content = f"""
+    Hello,
+    
+    This is an automatic notification from the Attendance System.
+    
+    User: {name}
+    Time: {time_str}
+    Date: {datetime.now().strftime('%Y-%m-%d')}
+    
+    Status: PRESENT
+    """
+    msg.set_content(content)
+
     try:
-        # resource_type='raw' is used for non-image files like CSV
-        cloudinary.uploader.upload(file_path, resource_type="raw", public_id=public_id)
-        print(f"Synced {file_path} to Cloudinary.")
+        # Connect to Gmail SMTP (SSL)
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(sender_email, sender_password)
+            smtp.send_message(msg)
+            print(f"Email notification sent for {name}.")
     except Exception as e:
-        print(f"Cloud upload failed: {e}")
+        print(f"Failed to send email: {e}")
 
 def mark_attendance(name):
-    """Mark attendance in a daily CSV file and sync to cloud."""
+    """Mark attendance in memory and sync to cloud."""
+    global todays_attendance
+    
     now = datetime.now()
     date_str = now.strftime('%Y-%m-%d')
     time_str = now.strftime('%H:%M:%S')
-    file_name = f'Attendance_{date_str}.csv'
-
-    # Create file with header if it doesn't exist
-    if not os.path.isfile(file_name):
-        with open(file_name, 'w') as f:
-            f.writelines('Name,Time\n')
-
-    # Read-Modify-Write to update timestamp
-    updated_lines = []
+    
+    # Check if user already exists
     found = False
     
-    with open(file_name, 'r') as f:
-        lines = f.readlines()
-        
-        # Keep header
-        if lines:
-            updated_lines.append(lines[0])
+    for entry in todays_attendance:
+        if entry['name'] == name:
+            entry['time'] = time_str # Update time
+            found = True
+            print(f"Updated memory for {name} at {time_str}")
+            break
             
-        # Process existing records
-        for line in lines[1:]:
-            entry = line.strip().split(',')
-            if entry and entry[0] == name:
-                # Update timestamp for this user
-                updated_lines.append(f'{name},{time_str}\n')
-                found = True
-                print(f"Updated attendance for {name} at {time_str}")
-            else:
-                updated_lines.append(line)
-    
-    # If not found, append new record
     if not found:
-        updated_lines.append(f'{name},{time_str}\n')
-        print(f"Marked new attendance for {name} at {time_str}")
+        todays_attendance.append({'name': name, 'time': time_str})
+        print(f"Added to memory: {name} at {time_str}")
+        
+        # Trigger Email Notification (Threaded to not block UI)
+        threading.Thread(target=send_email, args=(name, time_str)).start()
 
-    # Write back to file
-    with open(file_name, 'w') as f:
-        f.writelines(updated_lines)
-            
+    # Generate CSV Content
+    csv_lines = ['Name,Time']
+    for entry in todays_attendance:
+        csv_lines.append(f"{entry['name']},{entry['time']}")
+    
+    csv_content = '\n'.join(csv_lines)
+    
     # Sync to Cloudinary
-    # We use a folder 'attendance_records' to keep things organized
     public_id = f"attendance_records/Attendance_{date_str}.csv"
-    threading.Thread(target=upload_to_cloud, args=(file_name, public_id)).start()
+    threading.Thread(target=upload_to_cloud, args=(csv_content, public_id)).start()
 
 def gen_frames():
     """Generate frames for video streaming with face recognition."""
@@ -209,7 +274,6 @@ def upload_file():
             upload_result = cloudinary.uploader.upload(file, public_id=f"attendance/{name}")
             
             # Reload faces to include the new user immediately
-            # Optimization: could just append to global list, but this is safer
             load_known_faces()
             
             flash(f'Successfully registered {name}! (Saved to Cloudinary)', 'success')
@@ -224,38 +288,45 @@ def upload_file():
 @app.route('/get_attendance', methods=['POST'])
 def get_attendance():
     date_str = request.form.get('date')
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    
     if not date_str:
         return jsonify({'error': 'Date is required'}), 400
-        
-    file_name = f'Attendance_{date_str}.csv'
     
-    if not os.path.exists(file_name):
-        return jsonify({'count': 0, 'data': []})
-        
-    data = []
+    # If today, return memory data
+    if date_str == today_str:
+        return jsonify({'count': len(todays_attendance), 'data': todays_attendance})
+    
+    # If past date, fetch from Cloudinary
+    public_id = f"attendance_records/Attendance_{date_str}.csv"
     try:
-        with open(file_name, 'r') as f:
-            lines = f.readlines()
-            # Skip header (Name,Time)
+        url, options = cloudinary.utils.cloudinary_url(public_id, resource_type="raw")
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            lines = response.text.strip().split('\n')
+            data = []
             for line in lines[1:]:
                 parts = line.strip().split(',')
                 if len(parts) >= 2:
                     data.append({'name': parts[0], 'time': parts[1]})
+            return jsonify({'count': len(data), 'data': data})
+        else:
+            return jsonify({'count': 0, 'data': []})
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-        
-    return jsonify({'count': len(data), 'data': data})
 
 @app.route('/download_attendance/<date_str>')
 def download_attendance(date_str):
-    file_name = f'Attendance_{date_str}.csv'
-    if os.path.exists(file_name):
-        return send_file(file_name, as_attachment=True)
-    else:
-        flash('Attendance file not found for this date.', 'error')
-        return redirect(url_for('index'))
+    # For download, we can just redirect to the Cloudinary URL
+    # This is efficient and handles file generation for us
+    public_id = f"attendance_records/Attendance_{date_str}.csv"
+    url, options = cloudinary.utils.cloudinary_url(public_id, resource_type="raw")
+    return redirect(url)
 
 if __name__ == '__main__':
-    # Load faces before starting server
+    # Load data on startup
+    load_todays_data()
     load_known_faces()
     app.run(debug=True, port=5000)
