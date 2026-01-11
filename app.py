@@ -76,13 +76,30 @@ def load_known_faces():
     except Exception as e:
         print(f"Failed to connect to Cloudinary: {e}")
 
-def mark_attendance(name):
-    """Mark attendance in CSV file."""
-    if not os.path.isfile(ATTENDANCE_FILE):
-        with open(ATTENDANCE_FILE, 'w') as f:
-            f.writelines('Name,Date,Time')
+import threading
 
-    with open(ATTENDANCE_FILE, 'r+') as f:
+def upload_to_cloud(file_path, public_id):
+    """Uploads a file to Cloudinary in a separate thread."""
+    try:
+        # resource_type='raw' is used for non-image files like CSV
+        cloudinary.uploader.upload(file_path, resource_type="raw", public_id=public_id)
+        print(f"Synced {file_path} to Cloudinary.")
+    except Exception as e:
+        print(f"Cloud upload failed: {e}")
+
+def mark_attendance(name):
+    """Mark attendance in a daily CSV file and sync to cloud."""
+    now = datetime.now()
+    date_str = now.strftime('%Y-%m-%d')
+    file_name = f'Attendance_{date_str}.csv'
+
+    # Create file with header if it doesn't exist
+    if not os.path.isfile(file_name):
+        with open(file_name, 'w') as f:
+            f.writelines('Name,Time')
+
+    # Check for duplicates
+    with open(file_name, 'r+') as f:
         myDataList = f.readlines()
         nameList = []
         for line in myDataList:
@@ -90,10 +107,14 @@ def mark_attendance(name):
             nameList.append(entry[0])
             
         if name not in nameList:
-            now = datetime.now()
-            dtString = now.strftime('%Y-%m-%d,%H:%M:%S')
-            f.writelines(f'\n{name},{dtString}')
-            print(f"Attendance marked for {name}")
+            time_str = now.strftime('%H:%M:%S')
+            f.writelines(f'\n{name},{time_str}')
+            print(f"Attendance marked for {name} in {file_name}")
+            
+            # Sync to Cloudinary
+            # We use a folder 'attendance_records' to keep things organized
+            public_id = f"attendance_records/Attendance_{date_str}.csv"
+            threading.Thread(target=upload_to_cloud, args=(file_name, public_id)).start()
 
 def gen_frames():
     """Generate frames for video streaming with face recognition."""
