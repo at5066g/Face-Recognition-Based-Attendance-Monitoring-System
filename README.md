@@ -2,8 +2,7 @@
 
 A smart, cloud-integrated attendance monitoring system using **Face Recognition** and **Flask**.
 
-![Dashboard Preview](https://drive.google.com/file/d/1aYBpI9ouaxwYfV10xKJWCqMkSYYKFn0C/view?usp=drive_link) 
-*(Replace with actual screenshot if available)*
+![Dashboard Preview](https://res.cloudinary.com/dmsu228i4/image/upload/v1768160827/Screenshot_2026-01-12_011025_ajjami.png) 
 
 ## 🚀 Features
 
