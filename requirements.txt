@@ -1,0 +1,7 @@
+face-recognition
+opencv-python
+numpy
+Flask
+cloudinary
+python-dotenv
+requests
