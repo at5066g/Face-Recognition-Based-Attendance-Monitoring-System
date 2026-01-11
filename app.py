@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, jsonify, send_file
 import os
 from werkzeug.utils import secure_filename
 import cloudinary
@@ -91,30 +91,49 @@ def mark_attendance(name):
     """Mark attendance in a daily CSV file and sync to cloud."""
     now = datetime.now()
     date_str = now.strftime('%Y-%m-%d')
+    time_str = now.strftime('%H:%M:%S')
     file_name = f'Attendance_{date_str}.csv'
 
     # Create file with header if it doesn't exist
     if not os.path.isfile(file_name):
         with open(file_name, 'w') as f:
-            f.writelines('Name,Time')
+            f.writelines('Name,Time\n')
 
-    # Check for duplicates
-    with open(file_name, 'r+') as f:
-        myDataList = f.readlines()
-        nameList = []
-        for line in myDataList:
-            entry = line.split(',')
-            nameList.append(entry[0])
+    # Read-Modify-Write to update timestamp
+    updated_lines = []
+    found = False
+    
+    with open(file_name, 'r') as f:
+        lines = f.readlines()
+        
+        # Keep header
+        if lines:
+            updated_lines.append(lines[0])
             
-        if name not in nameList:
-            time_str = now.strftime('%H:%M:%S')
-            f.writelines(f'\n{name},{time_str}')
-            print(f"Attendance marked for {name} in {file_name}")
+        # Process existing records
+        for line in lines[1:]:
+            entry = line.strip().split(',')
+            if entry and entry[0] == name:
+                # Update timestamp for this user
+                updated_lines.append(f'{name},{time_str}\n')
+                found = True
+                print(f"Updated attendance for {name} at {time_str}")
+            else:
+                updated_lines.append(line)
+    
+    # If not found, append new record
+    if not found:
+        updated_lines.append(f'{name},{time_str}\n')
+        print(f"Marked new attendance for {name} at {time_str}")
+
+    # Write back to file
+    with open(file_name, 'w') as f:
+        f.writelines(updated_lines)
             
-            # Sync to Cloudinary
-            # We use a folder 'attendance_records' to keep things organized
-            public_id = f"attendance_records/Attendance_{date_str}.csv"
-            threading.Thread(target=upload_to_cloud, args=(file_name, public_id)).start()
+    # Sync to Cloudinary
+    # We use a folder 'attendance_records' to keep things organized
+    public_id = f"attendance_records/Attendance_{date_str}.csv"
+    threading.Thread(target=upload_to_cloud, args=(file_name, public_id)).start()
 
 def gen_frames():
     """Generate frames for video streaming with face recognition."""
@@ -159,6 +178,10 @@ def gen_frames():
 def index():
     return render_template('index.html')
 
+@app.route('/reports')
+def reports():
+    return render_template('reports.html')
+
 @app.route('/video_feed')
 def video_feed():
     return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
@@ -196,6 +219,40 @@ def upload_file():
             return redirect(url_for('index'))
     else:
         flash('Invalid file type. Please upload a PNG or JPG.', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/get_attendance', methods=['POST'])
+def get_attendance():
+    date_str = request.form.get('date')
+    if not date_str:
+        return jsonify({'error': 'Date is required'}), 400
+        
+    file_name = f'Attendance_{date_str}.csv'
+    
+    if not os.path.exists(file_name):
+        return jsonify({'count': 0, 'data': []})
+        
+    data = []
+    try:
+        with open(file_name, 'r') as f:
+            lines = f.readlines()
+            # Skip header (Name,Time)
+            for line in lines[1:]:
+                parts = line.strip().split(',')
+                if len(parts) >= 2:
+                    data.append({'name': parts[0], 'time': parts[1]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+        
+    return jsonify({'count': len(data), 'data': data})
+
+@app.route('/download_attendance/<date_str>')
+def download_attendance(date_str):
+    file_name = f'Attendance_{date_str}.csv'
+    if os.path.exists(file_name):
+        return send_file(file_name, as_attachment=True)
+    else:
+        flash('Attendance file not found for this date.', 'error')
         return redirect(url_for('index'))
 
 if __name__ == '__main__':

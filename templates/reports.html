@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Reports</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap');
+
+        :root {
+            --primary: #6366f1;
+            --secondary: #a855f7;
+            --bg-color: #0f172a;
+            --glass: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(168, 85, 247, 0.15) 0%, transparent 20%);
+            min-height: 100vh;
+            color: white;
+            overflow-x: hidden;
+            padding: 2rem;
+        }
+
+        /* Glassmorphism Card */
+        .card {
+            background: var(--glass);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 800px;
+            margin: 2rem auto;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #fff;
+        }
+
+        /* Button */
+        button {
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: opacity 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+
+        .back-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: #94a3b8;
+            margin-bottom: 2rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            border-color: var(--primary);
+            transform: translateX(-5px);
+        }
+
+        /* Background Shapes */
+        .shape {
+            position: absolute;
+            filter: blur(80px);
+            z-index: -1;
+            opacity: 0.6;
+        }
+
+        .shape-1 {
+            top: -100px;
+            left: -100px;
+            width: 300px;
+            height: 300px;
+            background: var(--primary);
+            border-radius: 50%;
+        }
+
+        .shape-2 {
+            bottom: -100px;
+            right: -100px;
+            width: 250px;
+            height: 250px;
+            background: var(--secondary);
+            border-radius: 50%;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+
+    <div style="max-width: 1200px; margin: 0 auto;">
+        <a href="/" class="card back-btn" style="padding: 0.75rem 1.5rem; margin: 0 0 2rem 0; box-shadow: none;">
+            ← Back to Dashboard
+        </a>
+    </div>
+
+    <header>
+        <h1>Attendance Reports</h1>
+    </header>
+
+    <div class="card">
+        <h2>Daily Reports & Export</h2>
+        <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <label for="report-date" style="display: block; margin-bottom: 0.5rem; color: #e2e8f0;">Select
+                    Date</label>
+                <input type="date" id="report-date"
+                    style="padding: 1rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 12px; color: white; width: 100%; outline: none;">
+            </div>
+            <button id="view-report-btn" style="flex: 0 0 auto; width: auto; background: var(--secondary);">View
+                Report</button>
+            <button id="download-csv-btn"
+                style="flex: 0 0 auto; width: auto; background: rgba(255,255,255,0.1);">Download
+                CSV</button>
+        </div>
+
+        <div id="report-results" style="margin-top: 2rem; display: none;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 12px;">
+                <h3 style="font-size: 1.2rem; font-weight: 500;">Total Present</h3>
+                <span id="total-count" style="font-size: 1.5rem; font-weight: 600; color: #4ade80;">0</span>
+            </div>
+
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="background: rgba(0,0,0,0.2); position: sticky; top: 0;">
+                        <tr>
+                            <th style="padding: 1rem; text-align: left; color: #94a3b8;">Name</th>
+                            <th style="padding: 1rem; text-align: right; color: #94a3b8;">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-list">
+                        <!-- Rows added by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Reports Logic
+        const reportDateInput = document.getElementById('report-date');
+        const viewReportBtn = document.getElementById('view-report-btn');
+        const downloadCsvBtn = document.getElementById('download-csv-btn');
+        const reportResults = document.getElementById('report-results');
+        const totalCount = document.getElementById('total-count');
+        const reportList = document.getElementById('report-list');
+
+        // Set default date to today
+        reportDateInput.valueAsDate = new Date();
+
+        viewReportBtn.addEventListener('click', async () => {
+            const date = reportDateInput.value;
+            if (!date) return alert("Please select a date");
+
+            const formData = new FormData();
+            formData.append('date', date);
+
+            try {
+                const response = await fetch('/get_attendance', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                totalCount.textContent = data.count;
+                reportList.innerHTML = '';
+
+                if (data.data.length === 0) {
+                    reportList.innerHTML = '<tr><td colspan="2" style="padding: 1rem; text-align: center; color: #94a3b8;">No records found for this date.</td></tr>';
+                } else {
+                    data.data.forEach(item => {
+                        const row = document.createElement('tr');
+                        row.style.borderBottom = '1px solid var(--border)';
+                        row.innerHTML = `
+                            <td style="padding: 1rem;">${item.name}</td>
+                            <td style="padding: 1rem; text-align: right; font-family: monospace;">${item.time}</td>
+                        `;
+                        reportList.appendChild(row);
+                    });
+                }
+                reportResults.style.display = 'block';
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to fetch report");
+            }
+        });
+
+        downloadCsvBtn.addEventListener('click', () => {
+            const date = reportDateInput.value;
+            if (!date) return alert("Please select a date");
+            window.location.href = `/download_attendance/${date}`;
+        });
+    </script>
+</body>
+
+</html>

@@ -13,6 +13,7 @@ A smart, cloud-integrated attendance monitoring system using **Face Recognition*
     -   Daily attendance CSV logs are auto-synced to Cloudinary (`attendance_records/`).
 -   **Dual Registration**: Add users by uploading a file or capturing a photo directly from the browser.
 -   **Daily Logging**: Automatically generates unique CSV files for each day (e.g., `Attendance_2024-03-15.csv`).
+-   **Reports & Export**: View synthesized daily reports and download CSVs via a dedicated dashboard page.
 
 ## 🛠️ Tech Stack
 
