@@ -145,7 +145,7 @@ def send_email(name, time_str):
     content = f"""
     Hello,
     
-    This is an automatic notification from the Attendance System.
+    This is an automatic notification from the Attendance System to notify you that {name} has checked in..
     
     User: {name}
     Time: {time_str}
