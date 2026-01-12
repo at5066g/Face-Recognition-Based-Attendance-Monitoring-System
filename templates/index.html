@@ -279,8 +279,10 @@
         .live-feed {
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            object-fit: cover;
             display: block;
+            transform: scaleX(-1);
+            /* Mirror effect */
         }
 
         .status-badge {
@@ -306,6 +308,59 @@
 
             100% {
                 box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+            }
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .toast {
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            transform: translateX(100%);
+            animation: slideInRight 0.3s forwards;
+            min-width: 250px;
+        }
+
+        .toast-success {
+            border-left: 4px solid #4ade80;
+        }
+
+        .toast-error {
+            border-left: 4px solid #f87171;
+        }
+
+        .toast-info {
+            border-left: 4px solid #60a5fa;
+        }
+
+        .toast.fade-out {
+            animation: fadeOutRight 0.5s forwards;
+        }
+
+        @keyframes slideInRight {
+            to {
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes fadeOutRight {
+            to {
+                transform: translateX(150%);
+                opacity: 0;
             }
         }
     </style>
@@ -394,7 +449,6 @@
         </div>
 
         <!-- Section 2: Live Attendance -->
-        <!-- Section 2: Live Attendance -->
         <div class="card">
             <div>
                 <h2>Live Attendance</h2>
@@ -404,7 +458,11 @@
             </div>
 
             <div class="live-feed-container">
-                <img id="attendance-feed" src="" class="live-feed" alt="Click Start to begin Attendance">
+                <!-- Replaced IMG with VIDEO for client-side capture -->
+                <video id="attendanceVideo" autoplay muted playsinline class="live-feed" style="display: none;"></video>
+
+                <canvas id="attendanceCanvas" style="display:none;"></canvas>
+
                 <div id="feed-placeholder"
                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; color: #94a3b8;">
                     <span style="font-size: 3rem; margin-bottom: 1rem;">🎥</span>
@@ -421,12 +479,15 @@
 
             <div style="margin-top: 1.5rem;">
                 <p style="color: #94a3b8; font-size: 0.9rem; line-height: 1.6;">
-                    Click "Start" to begin scanning. Detected users will be automatically logged.
+                    Click "Start" to activate your camera. The system will scan your face automatically every 2 seconds.
                 </p>
             </div>
         </div>
 
     </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
 
     <script>
         const fileInput = document.getElementById('file-input');
@@ -440,7 +501,7 @@
         const sectionUpload = document.getElementById('section-upload');
         const sectionCamera = document.getElementById('section-camera');
 
-        // Camera elements
+        // Registration Camera elements
         const video = document.getElementById('video');
         const imagePreview = document.getElementById('image-preview');
         const canvas = document.getElementById('canvas');
@@ -472,22 +533,23 @@
             await startCamera();
         });
 
-        // Start Camera
+        // Start Camera (Registration)
         async function startCamera() {
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
             } catch (err) {
                 console.error("Error accessing camera: ", err);
-                alert("Camera might be in use by the Attendance System! potentially need to stop the server stream to use the registration camera.");
+                showToast("Camera access error (Reg)", "error");
             }
         }
 
-        // Stop Camera
+        // Stop Camera (Registration)
         function stopCamera() {
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
                 video.srcObject = null;
+                stream = null;
             }
         }
 
@@ -538,7 +600,112 @@
             cameraStatus.style.display = 'none';
         }
 
-        // File Input Logic (Standard)
+        // --- ATTENDANCE LOGIC (CLIENT SIDE) ---
+        let attendanceStream = null;
+        let attendanceInterval = null;
+        const attendanceVideo = document.getElementById('attendanceVideo');
+        const attendanceCanvas = document.getElementById('attendanceCanvas');
+        const startAttendanceBtn = document.getElementById('start-attendance-btn');
+        const stopAttendanceBtn = document.getElementById('stop-attendance-btn');
+        const feedPlaceholder = document.getElementById('feed-placeholder');
+        const statusBadge = document.getElementById('status-badge');
+
+        startAttendanceBtn.addEventListener('click', async () => {
+            try {
+                attendanceStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                attendanceVideo.srcObject = attendanceStream;
+
+                // Update UI
+                attendanceVideo.style.display = 'block';
+                feedPlaceholder.style.display = 'none';
+                startAttendanceBtn.style.display = 'none';
+                stopAttendanceBtn.style.display = 'block';
+
+                statusBadge.innerHTML = '● System Online';
+                statusBadge.style.background = 'rgba(34, 197, 94, 0.2)';
+                statusBadge.style.color = '#4ade80';
+                statusBadge.style.animation = 'pulse 2s infinite';
+
+                showToast("Attendance System Started", "info");
+
+                // Start Loop
+                attendanceInterval = setInterval(verifyFace, 2000); // Check every 2s
+
+            } catch (err) {
+                console.error("Error accessing attendance camera:", err);
+                showToast("Could not access camera", "error");
+            }
+        });
+
+        stopAttendanceBtn.addEventListener('click', () => {
+            // Stop Stream
+            if (attendanceStream) {
+                attendanceStream.getTracks().forEach(track => track.stop());
+                attendanceVideo.srcObject = null;
+                attendanceStream = null;
+            }
+            if (attendanceInterval) {
+                clearInterval(attendanceInterval);
+                attendanceInterval = null;
+            }
+
+            // Update UI
+            attendanceVideo.style.display = 'none';
+            feedPlaceholder.style.display = 'flex';
+            startAttendanceBtn.style.display = 'block';
+            stopAttendanceBtn.style.display = 'none';
+
+            statusBadge.innerHTML = '● System Idle';
+            statusBadge.style.background = 'rgba(148, 163, 184, 0.2)';
+            statusBadge.style.color = '#94a3b8';
+            statusBadge.style.animation = 'none';
+
+            showToast("Attendance System Stopped", "info");
+        });
+
+        async function verifyFace() {
+            if (!attendanceStream || attendanceVideo.videoWidth === 0) return;
+
+            const context = attendanceCanvas.getContext('2d');
+            attendanceCanvas.width = attendanceVideo.videoWidth;
+            attendanceCanvas.height = attendanceVideo.videoHeight;
+            context.drawImage(attendanceVideo, 0, 0, attendanceCanvas.width, attendanceCanvas.height);
+
+            const imageData = attendanceCanvas.toDataURL('image/jpeg', 0.8);
+
+            try {
+                const response = await fetch('/verify_face', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showToast(`Marked Present: ${data.name}`, "success");
+                }
+            } catch (error) {
+                console.error("Verification error:", error);
+            }
+        }
+
+        // --- TOAST ALERTS ---
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerText = message;
+            container.appendChild(toast);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.add('fade-out');
+                setTimeout(() => toast.remove(), 500);
+            }, 3000);
+        }
+
+        // File Input UI Logic
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 fileName.textContent = e.target.files[0].name;
@@ -547,65 +714,18 @@
             }
         });
 
-        // Drag and Drop (Standard)
         ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, highlight, false);
+            dropZone.addEventListener(eventName, (e) => {
+                dropZone.style.borderColor = 'var(--secondary)';
+                dropZone.style.background = 'rgba(168, 85, 247, 0.1)';
+            }, false);
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, unhighlight, false);
-        });
-
-        function highlight(e) {
-            dropZone.style.borderColor = 'var(--secondary)';
-            dropZone.style.background = 'rgba(168, 85, 247, 0.1)';
-        }
-
-        function unhighlight(e) {
-            dropZone.style.borderColor = 'var(--border)';
-            dropZone.style.background = 'rgba(0, 0, 0, 0.1)';
-        }
-
-        // Attendance Control
-        const startAttendanceBtn = document.getElementById('start-attendance-btn');
-        const stopAttendanceBtn = document.getElementById('stop-attendance-btn');
-        const attendanceFeed = document.getElementById('attendance-feed');
-        const feedPlaceholder = document.getElementById('feed-placeholder');
-        const statusBadge = document.getElementById('status-badge');
-
-        startAttendanceBtn.addEventListener('click', () => {
-            // Start the feed
-            attendanceFeed.src = "{{ url_for('video_feed') }}";
-            attendanceFeed.style.display = 'block';
-            feedPlaceholder.style.display = 'none';
-
-            // Toggle buttons
-            startAttendanceBtn.style.display = 'none';
-            stopAttendanceBtn.style.display = 'block';
-
-            // Update Status
-            statusBadge.innerHTML = '● System Online';
-            statusBadge.style.background = 'rgba(34, 197, 94, 0.2)';
-            statusBadge.style.color = '#4ade80';
-            statusBadge.style.boxShadow = '';
-            statusBadge.style.animation = 'pulse 2s infinite';
-        });
-
-        stopAttendanceBtn.addEventListener('click', () => {
-            // Stop the feed
-            attendanceFeed.src = "";
-            attendanceFeed.style.display = 'none';
-            feedPlaceholder.style.display = 'flex';
-
-            // Toggle buttons
-            startAttendanceBtn.style.display = 'block';
-            stopAttendanceBtn.style.display = 'none';
-
-            // Update Status
-            statusBadge.innerHTML = '● System Idle';
-            statusBadge.style.background = 'rgba(148, 163, 184, 0.2)';
-            statusBadge.style.color = '#94a3b8';
-            statusBadge.style.animation = 'none';
+            dropZone.addEventListener(eventName, (e) => {
+                dropZone.style.borderColor = 'var(--border)';
+                dropZone.style.background = 'rgba(0, 0, 0, 0.1)';
+            }, false);
         });
     </script>
 </body>

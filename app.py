@@ -11,6 +11,7 @@ import numpy as np
 import face_recognition
 import requests
 import io
+import base64
 from datetime import datetime
 import threading
 
@@ -200,44 +201,22 @@ def mark_attendance(name):
     public_id = f"attendance_records/Attendance_{date_str}.csv"
     threading.Thread(target=upload_to_cloud, args=(csv_content, public_id)).start()
 
-def gen_frames():
-    """Generate frames for video streaming with face recognition."""
-    cap = cv2.VideoCapture(0)
+import base64
+
+# ... imports ...
+
+
+
+def readb64(uri):
+    """Converts a base64 string to an OpenCV image."""
     try:
-        while True:
-            success, img = cap.read()
-            if not success:
-                break
-            else:
-                imgS = cv2.resize(img, (0, 0), fx=0.25, fy=0.25)
-                imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
-
-                facesCurFrame = face_recognition.face_locations(imgS)
-                encodesCurFrame = face_recognition.face_encodings(imgS, facesCurFrame)
-
-                for encodeFace, faceLoc in zip(encodesCurFrame, facesCurFrame):
-                    matches = face_recognition.compare_faces(known_face_encodings, encodeFace)
-                    faceDis = face_recognition.face_distance(known_face_encodings, encodeFace)
-                    
-                    matchIndex = np.argmin(faceDis)
-                    
-                    if matches[matchIndex]:
-                        name = known_face_names[matchIndex].upper()
-                        
-                        y1, x2, y2, x1 = faceLoc
-                        y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
-                        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        cv2.rectangle(img, (x1, y2 - 35), (x2, y2), (0, 255, 0), cv2.FILLED)
-                        cv2.putText(img, name, (x1 + 6, y2 - 6), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
-                        
-                        mark_attendance(name)
-
-                ret, buffer = cv2.imencode('.jpg', img)
-                frame = buffer.tobytes()
-                yield (b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-    finally:
-        cap.release()
+        encoded_data = uri.split(',')[1]
+        nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        return img
+    except Exception as e:
+        print(f"Error decoding base64 image: {e}")
+        return None
 
 @app.route('/')
 def index():
@@ -247,9 +226,40 @@ def index():
 def reports():
     return render_template('reports.html')
 
-@app.route('/video_feed')
-def video_feed():
-    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/verify_face', methods=['POST'])
+def verify_face():
+    """Receives a client-side image snapshot and verifies the face."""
+    data = request.get_json()
+    image_data = data.get('image')
+    
+    if not image_data:
+        return jsonify({'status': 'error', 'message': 'No image data provided'}), 400
+
+    img = readb64(image_data)
+    if img is None:
+        return jsonify({'status': 'error', 'message': 'Invalid image data'}), 400
+
+    # Face Recognition Logic
+    imgS = cv2.resize(img, (0, 0), fx=0.25, fy=0.25)
+    imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
+
+    facesCurFrame = face_recognition.face_locations(imgS)
+    encodesCurFrame = face_recognition.face_encodings(imgS, facesCurFrame)
+
+    detected_name = None
+
+    for encodeFace, faceLoc in zip(encodesCurFrame, facesCurFrame):
+        matches = face_recognition.compare_faces(known_face_encodings, encodeFace)
+        faceDis = face_recognition.face_distance(known_face_encodings, encodeFace)
+        
+        matchIndex = np.argmin(faceDis)
+        
+        if matches[matchIndex]:
+            detected_name = known_face_names[matchIndex].upper()
+            mark_attendance(detected_name)
+            return jsonify({'status': 'success', 'name': detected_name})
+
+    return jsonify({'status': 'unknown'})
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -295,7 +305,9 @@ def get_attendance():
     
     # If today, return memory data
     if date_str == today_str:
-        return jsonify({'count': len(todays_attendance), 'data': todays_attendance})
+        # Sort desc by time (Last Seen first)
+        sorted_data = sorted(todays_attendance, key=lambda x: x['time'], reverse=True)
+        return jsonify({'count': len(sorted_data), 'data': sorted_data})
     
     # If past date, fetch from Cloudinary
     public_id = f"attendance_records/Attendance_{date_str}.csv"
@@ -310,7 +322,10 @@ def get_attendance():
                 parts = line.strip().split(',')
                 if len(parts) >= 2:
                     data.append({'name': parts[0], 'time': parts[1]})
-            return jsonify({'count': len(data), 'data': data})
+            
+            # Sort desc by time
+            sorted_data = sorted(data, key=lambda x: x['time'], reverse=True)
+            return jsonify({'count': len(sorted_data), 'data': sorted_data})
         else:
             return jsonify({'count': 0, 'data': []})
             
