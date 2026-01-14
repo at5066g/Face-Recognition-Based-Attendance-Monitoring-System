@@ -1,8 +1,0 @@
-[phases.setup]
-nixPkgs = ["python310", "cmake", "gcc", "gnumake", "xorg.libX11", "xorg.libXext", "xorg.libSm", "xorg.libICE"]
-
-[phases.install]
-cmds = ["python -m pip install -r requirements.txt"]
-
-[start]
-cmd = "gunicorn app:app"
