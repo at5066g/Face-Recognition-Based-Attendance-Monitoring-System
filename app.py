@@ -165,6 +165,31 @@ def send_email(name, time_str):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
+@app.route('/test_email')
+def test_email():
+    """Debug route to test email configuration."""
+    sender = os.getenv('MAIL_USERNAME')
+    password = os.getenv('MAIL_PASSWORD')
+    recipient = os.getenv('MAIL_RECIPIENT')
+    
+    if not sender or not password or not recipient:
+        return jsonify({'status': 'error', 'message': 'Missing Environment Variables', 
+                        'debug': {'user': sender, 'pass': '***' if password else None, 'to': recipient}})
+
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = "Test Email from Attendance System"
+        msg['From'] = sender
+        msg['To'] = recipient
+        msg.set_content("If you are reading this, your email configuration is correct! 🚀")
+
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(sender, password)
+            smtp.send_message(msg)
+        return jsonify({'status': 'success', 'message': f'Email sent to {recipient}'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
 def mark_attendance(name):
     """Mark attendance in memory and sync to cloud."""
     global todays_attendance
