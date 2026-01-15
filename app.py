@@ -128,46 +128,39 @@ def load_known_faces():
     except Exception as e:
         print(f"Failed to connect to Cloudinary: {e}")
 
-import smtplib
-from email.message import EmailMessage
+import resend
 
 # ... (rest of imports)
 
-def send_email(name, time_str):
-    """Sends an email notification on first daily check-in."""
-    sender_email = os.getenv('MAIL_USERNAME')
-    sender_password = os.getenv('MAIL_PASSWORD')
-    recipient_email = os.getenv('MAIL_RECIPIENT')
+# Configure Resend (Get key from Env)
+resend.api_key = os.getenv('RESEND_API_KEY')
 
-    if not sender_email or not sender_password or not recipient_email:
-        print("Email credentials missing in .env. Skipping notification.")
+def send_email(name, time_str):
+    """Sends an email notification via Resend API."""
+    recipient_email = os.getenv('MAIL_RECIPIENT')
+    resend_key = os.getenv('RESEND_API_KEY')
+
+    if not resend_key or not recipient_email:
+        print("Resend Credentials missing. Skipping notification.")
         return
 
-    msg = EmailMessage()
-    msg['Subject'] = f"Attendance Alert: {name} Checked In"
-    msg['From'] = sender_email
-    msg['To'] = recipient_email
-    
-    content = f"""
-    Hello,
-    
-    This is an automatic notification from the Attendance System to notify you that {name} has checked in..
-    
-    User: {name}
-    Time: {time_str}
-    Date: {get_current_time().strftime('%Y-%m-%d')}
-    
-    Status: PRESENT
-    """
-    msg.set_content(content)
-
     try:
-        # Connect to Gmail SMTP (STARTTLS)
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as smtp:
-            smtp.starttls()
-            smtp.login(sender_email, sender_password)
-            smtp.send_message(msg)
-            print(f"Email notification sent for {name}.")
+        html_content = f"""
+        <p>Hello,</p>
+        <p>This is an automatic notification from the Attendance System.</p>
+        <p><strong>User:</strong> {name}<br>
+        <strong>Time:</strong> {time_str}<br>
+        <strong>Date:</strong> {get_current_time().strftime('%Y-%m-%d')}<br>
+        <strong>Status:</strong> PRESENT</p>
+        """
+
+        r = resend.Emails.send({
+            "from": "Attendance System <onboarding@resend.dev>",
+            "to": recipient_email,
+            "subject": f"Attendance Alert: {name} Checked In",
+            "html": html_content
+        })
+        print(f"Email notification sent for {name}. ID: {r.get('id')}")
     except Exception as e:
         print(f"Failed to send email: {e}")
 
@@ -175,28 +168,20 @@ def send_email(name, time_str):
 def test_email():
     """Debug route to test email configuration."""
     try:
-        sender = os.getenv('MAIL_USERNAME')
-        password = os.getenv('MAIL_PASSWORD')
         recipient = os.getenv('MAIL_RECIPIENT')
+        resend_key = os.getenv('RESEND_API_KEY')
         
-        if not sender or not password or not recipient:
-            return jsonify({'status': 'error', 'message': 'Missing Environment Variables', 
-                            'debug': {'user': sender, 'pass': '***' if password else None, 'to': recipient}})
+        if not resend_key or not recipient:
+            return jsonify({'status': 'error', 'message': 'Missing RESEND_API_KEY or MAIL_RECIPIENT'})
 
-        msg = EmailMessage()
-        msg['Subject'] = "Test Email from Attendance System"
-        msg['From'] = sender
-        msg['To'] = recipient
-        msg.set_content("If you are reading this, your email configuration is correct! 🚀")
-
-        # Try STARTTLS on Port 587 (More reliable on Cloud)
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as smtp:
-            smtp.starttls()
-            smtp.login(sender, password)
-            smtp.send_message(msg)
-        return jsonify({'status': 'success', 'message': f'Email sent to {recipient}'})
+        r = resend.Emails.send({
+            "from": "Attendance System <onboarding@resend.dev>",
+            "to": recipient,
+            "subject": "Test Email from Attendance System",
+            "html": "<p><strong>It works!</strong> The Resend API is connected successfully. 🚀</p>"
+        })
+        return jsonify({'status': 'success', 'message': f'Email sent to {recipient}', 'id': r.get('id')})
     except Exception as e:
-        # Catch unexpected errors (like ImportErrors or TypeErrors)
         import traceback
         return jsonify({'status': 'error', 'message': str(e), 'trace': traceback.format_exc()})
 
