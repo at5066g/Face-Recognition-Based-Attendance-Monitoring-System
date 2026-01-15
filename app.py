@@ -249,6 +249,10 @@ def verify_face():
     detected_name = None
 
     for encodeFace, faceLoc in zip(encodesCurFrame, facesCurFrame):
+        if not known_face_encodings:
+             print("Warning: No known faces loaded!")
+             return jsonify({'status': 'unknown', 'message': 'No registered users'})
+
         matches = face_recognition.compare_faces(known_face_encodings, encodeFace)
         faceDis = face_recognition.face_distance(known_face_encodings, encodeFace)
         
@@ -340,8 +344,11 @@ def download_attendance(date_str):
     url, options = cloudinary.utils.cloudinary_url(public_id, resource_type="raw")
     return redirect(url)
 
+# Load data on startup (Wait for Gunicorn to import app)
+# We use a slight delay or just call it globally
+print("Starting App: Loading Data...")
+load_todays_data()
+load_known_faces()
+
 if __name__ == '__main__':
-    # Load data on startup
-    load_todays_data()
-    load_known_faces()
     app.run(debug=True, port=5000)
