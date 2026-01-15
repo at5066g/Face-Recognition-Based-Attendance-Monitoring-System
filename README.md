@@ -2,7 +2,7 @@
 
 A smart, cloud-integrated attendance monitoring system using **Face Recognition** and **Flask**.
 
-![Dashboard Preview](https://res.cloudinary.com/dmsu228i4/image/upload/v1768160827/Screenshot_2026-01-12_011025_ajjami.png) 
+Web App preview - [Attendance System](attendance-system-012.up.railway.app) 
 
 ## 🚀 Features
 
