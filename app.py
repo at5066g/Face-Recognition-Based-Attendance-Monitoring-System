@@ -14,6 +14,11 @@ import io
 import base64
 from datetime import datetime
 import threading
+import pytz
+
+# Helper for India Time
+def get_current_time():
+    return datetime.now(pytz.timezone('Asia/Kolkata'))
 
 # Load environment variables
 load_dotenv()
@@ -57,7 +62,7 @@ def load_todays_data():
     global todays_attendance
     todays_attendance = []
     
-    now = datetime.now()
+    now = get_current_time()
     date_str = now.strftime('%Y-%m-%d')
     public_id = f"attendance_records/Attendance_{date_str}.csv"
     
@@ -150,7 +155,7 @@ def send_email(name, time_str):
     
     User: {name}
     Time: {time_str}
-    Date: {datetime.now().strftime('%Y-%m-%d')}
+    Date: {get_current_time().strftime('%Y-%m-%d')}
     
     Status: PRESENT
     """
@@ -194,7 +199,7 @@ def mark_attendance(name):
     """Mark attendance in memory and sync to cloud."""
     global todays_attendance
     
-    now = datetime.now()
+    now = get_current_time()
     date_str = now.strftime('%Y-%m-%d')
     time_str = now.strftime('%H:%M:%S')
     
@@ -327,7 +332,7 @@ def upload_file():
 @app.route('/get_attendance', methods=['POST'])
 def get_attendance():
     date_str = request.form.get('date')
-    today_str = datetime.now().strftime('%Y-%m-%d')
+    today_str = get_current_time().strftime('%Y-%m-%d')
     
     if not date_str:
         return jsonify({'error': 'Date is required'}), 400
