@@ -162,8 +162,9 @@ def send_email(name, time_str):
     msg.set_content(content)
 
     try:
-        # Connect to Gmail SMTP (SSL)
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        # Connect to Gmail SMTP (STARTTLS)
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as smtp:
+            smtp.starttls()
             smtp.login(sender_email, sender_password)
             smtp.send_message(msg)
             print(f"Email notification sent for {name}.")
@@ -188,7 +189,9 @@ def test_email():
         msg['To'] = recipient
         msg.set_content("If you are reading this, your email configuration is correct! 🚀")
 
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        # Try STARTTLS on Port 587 (More reliable on Cloud)
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as smtp:
+            smtp.starttls()
             smtp.login(sender, password)
             smtp.send_message(msg)
         return jsonify({'status': 'success', 'message': f'Email sent to {recipient}'})
