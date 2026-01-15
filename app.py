@@ -173,15 +173,15 @@ def send_email(name, time_str):
 @app.route('/test_email')
 def test_email():
     """Debug route to test email configuration."""
-    sender = os.getenv('MAIL_USERNAME')
-    password = os.getenv('MAIL_PASSWORD')
-    recipient = os.getenv('MAIL_RECIPIENT')
-    
-    if not sender or not password or not recipient:
-        return jsonify({'status': 'error', 'message': 'Missing Environment Variables', 
-                        'debug': {'user': sender, 'pass': '***' if password else None, 'to': recipient}})
-
     try:
+        sender = os.getenv('MAIL_USERNAME')
+        password = os.getenv('MAIL_PASSWORD')
+        recipient = os.getenv('MAIL_RECIPIENT')
+        
+        if not sender or not password or not recipient:
+            return jsonify({'status': 'error', 'message': 'Missing Environment Variables', 
+                            'debug': {'user': sender, 'pass': '***' if password else None, 'to': recipient}})
+
         msg = EmailMessage()
         msg['Subject'] = "Test Email from Attendance System"
         msg['From'] = sender
@@ -193,7 +193,9 @@ def test_email():
             smtp.send_message(msg)
         return jsonify({'status': 'success', 'message': f'Email sent to {recipient}'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        # Catch unexpected errors (like ImportErrors or TypeErrors)
+        import traceback
+        return jsonify({'status': 'error', 'message': str(e), 'trace': traceback.format_exc()})
 
 def mark_attendance(name):
     """Mark attendance in memory and sync to cloud."""
