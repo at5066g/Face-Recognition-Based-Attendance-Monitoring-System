@@ -174,13 +174,26 @@ def test_email():
         if not resend_key or not recipient:
             return jsonify({'status': 'error', 'message': 'Missing RESEND_API_KEY or MAIL_RECIPIENT'})
 
+        # Dummy data for preview
+        name = "Test User"
+        time_str = get_current_time().strftime('%H:%M:%S')
+
+        html_content = f"""
+        <p>Hello,</p>
+        <p>This is an automatic notification from the Attendance System.</p>
+        <p><strong>User:</strong> {name}<br>
+        <strong>Time:</strong> {time_str}<br>
+        <strong>Date:</strong> {get_current_time().strftime('%Y-%m-%d')}<br>
+        <strong>Status:</strong> PRESENT</p>
+        """
+
         r = resend.Emails.send({
             "from": "Attendance System <onboarding@resend.dev>",
             "to": recipient,
-            "subject": "Test Email from Attendance System",
-            "html": "<p><strong>It works!</strong> The Resend API is connected successfully. 🚀</p>"
+            "subject": f"Attendance Alert: {name} Checked In",
+            "html": html_content
         })
-        return jsonify({'status': 'success', 'message': f'Email sent to {recipient}', 'id': r.get('id')})
+        return jsonify({'status': 'success', 'message': f'Sample Attendance Email sent to {recipient}', 'id': r.get('id')})
     except Exception as e:
         import traceback
         return jsonify({'status': 'error', 'message': str(e), 'trace': traceback.format_exc()})
